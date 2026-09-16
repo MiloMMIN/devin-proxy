@@ -49,7 +49,7 @@ function mapOpenAIToolChoice(choice: OpenAIChatRequest["tool_choice"]): ChatTool
 
 export async function handleChatCompletions(req: Request, deps: AppDeps, reqId: string): Promise<Response> {
   const body = (await req.json()) as OpenAIChatRequest;
-  const modelUid = deps.catalog.resolve(body.model);
+  const modelUid = await deps.catalog.resolve(body.model, body.reasoning_effort);
   log.debug(`[chat/completions ${reqId}] model=${body.model} uid=${modelUid} stream=${!!body.stream}`);
 
   const cascadeId = crypto.randomUUID();

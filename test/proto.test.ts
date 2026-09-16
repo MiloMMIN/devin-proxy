@@ -5,6 +5,7 @@ import {
   ProtoEncoder,
   decodeGetChatMessageResponse,
   encodeGetChatMessageRequest,
+  encodeMetadata,
   type GetChatMessageRequest,
 } from "../src/proto.js";
 
@@ -57,6 +58,43 @@ describe("ProtoEncoder/ProtoDecoder roundtrip", () => {
     enc.bool(3, false);
     enc.double(4, 0);
     expect(enc.finish().length).toBe(0);
+  });
+});
+
+describe("encodeMetadata", () => {
+  test("encodes ideType as field 28", () => {
+    const enc = new ProtoEncoder();
+    encodeMetadata(enc, {
+      ideName: "windsurf", ideVersion: "3.2.23", extensionName: "windsurf",
+      extensionVersion: "1.48.2", apiKey: "tok", locale: "en",
+      ideType: "chisel", userJwt: "jwt",
+    });
+    const d = new ProtoDecoder(enc.finish());
+    const fields = new Map<number, string>();
+    while (!d.done) {
+      const { field, wire } = d.readTag();
+      if (wire === 2) fields.set(field, d.readString());
+      else d.skip(wire);
+    }
+    expect(fields.get(1)).toBe("windsurf");
+    expect(fields.get(28)).toBe("chisel");
+    expect(fields.get(21)).toBe("jwt");
+  });
+
+  test("omits field 28 when ideType is unset", () => {
+    const enc = new ProtoEncoder();
+    encodeMetadata(enc, {
+      ideName: "windsurf", ideVersion: "3.2.23", extensionName: "windsurf",
+      extensionVersion: "1.48.2", apiKey: "tok", locale: "en", userJwt: "jwt",
+    });
+    const d = new ProtoDecoder(enc.finish());
+    const fields = new Set<number>();
+    while (!d.done) {
+      const { field, wire } = d.readTag();
+      fields.add(field);
+      d.skip(wire);
+    }
+    expect(fields.has(28)).toBe(false);
   });
 });
 

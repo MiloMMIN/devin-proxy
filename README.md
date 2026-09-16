@@ -9,6 +9,7 @@
 - **零登录**：自动读取本机 Devin Desktop 已保存的登录态，无需再走 OAuth
 - **三种协议**：`/v1/chat/completions`、`/v1/responses`、`/v1/messages`（含 `count_tokens`），全部支持流式
 - **实时模型目录**：`GET /v1/models` 直接从 Devin 拉取当前可用模型（200+），带 10 分钟缓存，不再维护过期静态大表
+- **全部模型可用**：以 Devin Local（chisel）身份声明 `ide_type`，`gpt-5-6-sol / luna / terra`、`gpt-6-astra` 这类“仅 Devin Local”模型也能直接调用
 - **JWT 缓存**：上游 JWT 有效期 15 分钟，缓存后每次请求省下约 2~3 秒握手延迟
 - **客户端断连即停**：客户端取消请求时立刻中止上游流，不烧额度
 - **可选访问密钥**：`PROXY_API_KEY` 保护 `/v1/*`，默认只监听 `127.0.0.1`
@@ -93,6 +94,14 @@ curl http://127.0.0.1:3000/v1/chat/completions \
 | `LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error`，输出到 stderr |
 
 `model` 字段接受任意上游模型 uid（以 `bun run models` 或 `GET /v1/models` 输出为准），未知 uid 原样透传给 Devin；响应中的 `model` 回填客户端传入的原始值。
+
+上游没有 effort 参数——每个 `家族-档位[-档位后缀]` 组合都是独立 uid，反代负责把“家族名 + 思考档位”解析成具体 uid：
+
+- `model` 里可直接写 `家族:档位`，如 `claude-opus-5:xhigh`、`claude-opus-5:high-fast`；`family:fast` / `family:priority` 表示默认档位 + 对应层级。
+- 三种协议各自的 effort 参数也会改写档位：Chat Completions 的 `reasoning_effort`、Responses 的 `reasoning.effort`、Messages 的 `thinking`（`disabled`→none，`enabled`/`adaptive` 按 `budget_tokens` 分档）及顶层 `effort`。档位取值 `none|minimal|low|medium|high|xhigh|max`（`off`→`none`，未知值忽略）；`model` 里的 `:` 写法优先于参数。
+- 裸家族名默认 `medium`；目标 uid 不存在时按档位距离就近回退（同级取低档），原名的 `-fast` / `-priority` / `-1m` 后缀保留（如 `gpt-5-6-terra` + `high` → `gpt-5-6-terra-high-priority`）。
+- `MODEL_MAP` 命中的别名优先，不做任何改写。
+- 目录之外额外暴露三个 uid：`adaptive`（服务端自动路由）和两个 fusion 预设 `fusion-fable5.1-swe2`、`fusion-astra-swe2`（max 档 lead + SWE-2 High sidekick；离开 chisel 后 sidekick 交接工具无人执行，实际只跑 lead）。任意 `fusion-<lead>-sidekick-<sidekick>` 原始 uid 也可直接透传。
 
 ## 客户端配置
 

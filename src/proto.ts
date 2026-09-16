@@ -219,6 +219,7 @@ export interface Metadata {
   extensionVersion: string;
   apiKey: string;
   locale: string;
+  ideType?: string;
   userJwt?: string;
 }
 
@@ -229,6 +230,7 @@ export function encodeMetadata(e: ProtoEncoder, m: Metadata): void {
   e.string(2, m.extensionVersion);
   e.string(3, m.apiKey);
   e.string(4, m.locale);
+  e.string(28, m.ideType);
   e.string(21, m.userJwt);
 }
 

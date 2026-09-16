@@ -35,7 +35,7 @@ type Usage = GetChatMessageResponse["usage"] | undefined;
 
 export async function handleResponses(req: Request, deps: AppDeps, reqId: string): Promise<Response> {
   const body = (await req.json()) as OpenAIResponsesRequest;
-  const modelUid = deps.catalog.resolve(body.model);
+  const modelUid = await deps.catalog.resolve(body.model, body.reasoning?.effort);
   log.debug(`[responses ${reqId}] model=${body.model} uid=${modelUid} stream=${!!body.stream}`);
 
   // Convert Responses input items (including function-call turns) to the

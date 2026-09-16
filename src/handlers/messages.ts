@@ -21,6 +21,7 @@ import {
 } from "../sanitize.js";
 import { sseResponse } from "../sse.js";
 import { classifyUpstreamError, errorResponse, jsonResponse } from "../http.js";
+import { effortLevelFromThinking } from "../models.js";
 import { log } from "../log.js";
 
 interface AnthropicRequest {
@@ -35,6 +36,7 @@ interface AnthropicRequest {
   tool_choice?: { type: string; name?: string };
   stop_sequences?: string[];
   thinking?: { type: string; budget_tokens?: number };
+  effort?: string;
 }
 
 type Usage = GetChatMessageResponse["usage"] | undefined;
@@ -49,7 +51,7 @@ function mapAnthropicToolChoice(choice: AnthropicRequest["tool_choice"]): ChatTo
 
 export async function handleAnthropicMessages(req: Request, deps: AppDeps, reqId: string): Promise<Response> {
   const body = (await req.json()) as AnthropicRequest;
-  const modelUid = deps.catalog.resolve(body.model);
+  const modelUid = await deps.catalog.resolve(body.model, effortLevelFromThinking(body.thinking, body.effort));
   log.debug(`[messages ${reqId}] model=${body.model} uid=${modelUid} stream=${!!body.stream}`);
 
   const internal = anthropicToInternal(body.messages);

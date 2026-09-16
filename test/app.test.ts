@@ -10,6 +10,8 @@ import type { ChatParams, ChatStreamEvent, DiscoveredModel, UpstreamClient } fro
 
 const MODELS: DiscoveredModel[] = [
   { id: "glm-5-2-none", name: "GLM 5.2", contextWindow: 200_000, maxTokens: 64_000, reasoning: false, supportsImages: true },
+  { id: "claude-opus-5-medium", name: "Claude Opus 5", contextWindow: 200_000, maxTokens: 64_000, reasoning: true, supportsImages: true },
+  { id: "claude-opus-5-high", name: "Claude Opus 5", contextWindow: 200_000, maxTokens: 64_000, reasoning: true, supportsImages: true },
 ];
 
 let script: ChatStreamEvent[];
@@ -122,7 +124,7 @@ describe("GET /v1/models", () => {
     const res = await app(req("/v1/models"));
     const body = await res.json() as { object: string; data: Record<string, unknown>[] };
     expect(body.object).toBe("list");
-    expect(body.data).toHaveLength(1);
+    expect(body.data).toHaveLength(6);
     expect(body.data[0]).toMatchObject({
       id: "glm-5-2-none", object: "model", owned_by: "devin",
       context_window: 200_000, max_tokens: 64_000, reasoning: false, supports_images: true,
@@ -171,6 +173,19 @@ describe("POST /v1/chat/completions", () => {
     expect(lastParams!.systemPrompt).toBe("SYS");
     expect(lastParams!.messages).toHaveLength(1);
     expect(lastParams!.messages[0].prompt).toBe("hey");
+  });
+
+  test("reasoning_effort resolves a family model to its level uid", async () => {
+    const app = makeApp(makeConfig());
+    const res = await app(post("/v1/chat/completions", {
+      model: "claude-opus-5",
+      reasoning_effort: "high",
+      messages: [{ role: "user", content: "x" }],
+    }));
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.model).toBe("claude-opus-5"); // echo stays the client's id
+    expect(lastParams!.modelUid).toBe("claude-opus-5-high");
   });
 
   test("non-stream: same-id toolcall frames append arguments", async () => {

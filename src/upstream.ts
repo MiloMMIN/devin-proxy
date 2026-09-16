@@ -36,6 +36,11 @@ const DEVIN_AUTH_PATH = "/exa.auth_pb.AuthService/GetUserJwt";
 const CHAT_MESSAGE_PATH = "/exa.api_server_pb.ApiServerService/GetChatMessage";
 const DEVIN_IDE_VERSION = "3.2.23";
 const DEVIN_EXTENSION_VERSION = "1.48.2";
+// Upstream gates some models (gpt-5-6-sol/luna/terra, gpt-6-astra) to
+// "Devin Local" — the bundled Devin CLI (chisel) — and identifies it via
+// Metadata.ide_type. Without it those models fail with
+// `permission_denied: This model is only in Devin Local`.
+const DEVIN_IDE_TYPE = "chisel";
 const SESSION_TOKEN_PREFIX = "devin-session-token$";
 const CONNECT_COMPRESSED_FLAG = 0x01;
 const CONNECT_END_STREAM_FLAG = 0x02;
@@ -56,6 +61,7 @@ function buildMetadata(apiKey: string, userJwt?: string): Metadata {
     extensionVersion: DEVIN_EXTENSION_VERSION,
     apiKey,
     locale: "en",
+    ideType: DEVIN_IDE_TYPE,
     userJwt,
   };
 }
@@ -479,6 +485,7 @@ export function createUpstreamClient(opts: { tokens: TokenProvider; baseUrl?: st
       e.string(2, DEVIN_EXTENSION_VERSION);
       e.string(3, token);
       e.string(4, "en");
+      e.string(28, DEVIN_IDE_TYPE);
     });
     const url = `${defaultBase}${GET_CLI_MODEL_CONFIGS_PATH}`;
     const res = await fetch(url, {
