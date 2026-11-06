@@ -25,6 +25,11 @@ export interface ProxyConfig {
   modelMap: Record<string, string>;
   /** Model catalog cache TTL (MODELS_TTL_MS, default 600000). */
   modelsTtlMs: number;
+  /**
+   * Collapse level-encoded uids into one base entry per family/tier in
+   * `/v1/models` (MODELS_COLLAPSE, default on). Set `0` to list every uid.
+   */
+  collapseModels: boolean;
   /** Log level (LOG_LEVEL, default info). */
   logLevel: LogLevel;
 }
@@ -44,6 +49,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ProxyConfig {
   const rawLevel = (env.LOG_LEVEL ?? "info").toLowerCase();
   const port = Number(env.PORT ?? "");
   const ttl = Number(env.MODELS_TTL_MS ?? "");
+  const collapse = (env.MODELS_COLLAPSE ?? "1").trim().toLowerCase();
 
   return {
     port: Number.isFinite(port) && port > 0 ? port : 3000,
@@ -55,6 +61,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ProxyConfig {
     desktopStateDb: env.DEVIN_DESKTOP_STATE_DB?.trim() || undefined,
     modelMap,
     modelsTtlMs: Number.isFinite(ttl) && ttl > 0 ? ttl : 600_000,
+    collapseModels: !["0", "false", "off", "no"].includes(collapse),
     logLevel: (LOG_LEVELS.has(rawLevel) ? rawLevel : "info") as LogLevel,
   };
 }

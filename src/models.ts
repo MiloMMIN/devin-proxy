@@ -66,6 +66,90 @@ function withExtras(models: DiscoveredModel[]): DiscoveredModel[] {
   return [...models, ...EXTRA_MODELS.filter((e) => !ids.has(e.id))];
 }
 
+/**
+ * Collapse leveled upstream uids into one client-facing entry per family and
+ * functional tier.
+ *
+ * Devin bakes the thinking level into the uid (`swe-2-high`,
+ * `claude-opus-4-8-high-fast`), so the raw catalog shows every depth as a
+ * separate model and clients have to choose a depth by choosing a model.
+ * Collapsed entries advertise their levels in `supportedEfforts`; a client
+ * picks the bare family (`swe-2`) and sends its own reasoning level, and
+ * `resolve` maps that pair back to the exact uid (`swe-2-high`).
+ *
+ * Groups are keyed by family stem plus the functional modifiers already in the
+ * uid, so `-fast` / `-priority` / `-1m` variants stay distinct entries
+ * (`claude-opus-4-8-fast`) instead of being merged into the base. Ids with no
+ * level and no modifier (`glm-5-2`, `adaptive`, lightning tiers) pass through.
+ */
+export function collapseModelLevels(models: DiscoveredModel[]): DiscoveredModel[] {
+  interface Group {
+    id: string;
+    efforts: Set<string>;
+    name: string;
+    repr?: DiscoveredModel;
+    reprLevel?: string;
+    contextWindow: number;
+    maxTokens: number;
+    reasoning: boolean;
+    supportsImages: boolean;
+  }
+  const groups = new Map<string, Group>();
+
+  for (const m of models) {
+    const { stem, level, mods } = parseUidTail(m.id);
+    // A bare level token is not a family; keep the id opaque rather than
+    // inventing an empty stem.
+    const id = stem === "" ? m.id : stem + mods.map((mod) => `-${mod}`).join("");
+    const key = `${stem === "" ? m.id : stem}\t${mods.join("-")}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        id,
+        efforts: new Set(),
+        name: m.name || id,
+        contextWindow: 0,
+        maxTokens: 0,
+        reasoning: false,
+        supportsImages: false,
+      };
+      groups.set(key, group);
+    }
+    const effort = level === "thinking" ? "high" : level;
+    if (effort) group.efforts.add(effort);
+    for (const raw of m.supportedEfforts ?? []) {
+      const normalized = raw === "thinking" ? "high" : normalizeEffort(raw);
+      if (normalized) group.efforts.add(normalized);
+    }
+    group.contextWindow = Math.max(group.contextWindow, m.contextWindow);
+    group.maxTokens = Math.max(group.maxTokens, m.maxTokens);
+    group.reasoning ||= m.reasoning;
+    group.supportsImages ||= m.supportsImages;
+    // Prefer the default-level variant as the representative (its name and
+    // metadata describe the plain family); otherwise the first one seen.
+    const isDefault = level === DEFAULT_LEVEL;
+    if (!group.repr || (isDefault && group.reprLevel !== DEFAULT_LEVEL)) {
+      group.repr = m;
+      group.reprLevel = level;
+    }
+  }
+
+  return [...groups.values()].map((group) => {
+    const supportedEfforts = [...group.efforts].sort(
+      (a, b) => (LEVEL_SCORE.get(a) ?? LEVELS.length) - (LEVEL_SCORE.get(b) ?? LEVELS.length),
+    );
+    return {
+      id: group.id,
+      name: group.repr?.name || group.name,
+      contextWindow: group.contextWindow,
+      maxTokens: group.maxTokens,
+      reasoning: group.reasoning || supportedEfforts.length > 0,
+      supportsImages: group.supportsImages,
+      ...(supportedEfforts.length > 0 ? { supportedEfforts } : {}),
+    };
+  });
+}
+
 /** Normalize an effort hint: `off`→`none`; `auto`/unknown values → undefined. */
 function normalizeEffort(raw?: string): string | undefined {
   const v = raw?.trim().toLowerCase();
@@ -199,20 +283,34 @@ export class ModelCatalog {
     private upstream: UpstreamClient,
     private ttlMs: number,
     private modelMap: Record<string, string>,
+    /** Collapse effort-variant uids into base entries for `list()`. */
+    private collapseLevels = true,
   ) {}
 
   /**
-   * List discovered models. Returns the cache while fresh; on expiry (or
-   * `force`) refreshes from upstream. A failed refresh falls back to the
-   * stale cache when one exists, otherwise rethrows.
+   * List the client-facing models. Returns the cache while fresh; on expiry
+   * (or `force`) refreshes from upstream. With `collapseLevels` on, one entry
+   * per family/tier carries the union of its levels in `supportedEfforts`.
+   * A failed refresh falls back to the stale cache when one exists, otherwise
+   * rethrows.
    */
   async list(force = false): Promise<DiscoveredModel[]> {
+    const models = withExtras(await this.load(force));
+    return this.collapseLevels ? collapseModelLevels(models) : models;
+  }
+
+  /**
+   * The raw catalog, effort variants included. `resolve` must see every uid:
+   * `swe-2` + `high` maps back to the exact `swe-2-high`, which the collapsed
+   * display list no longer names.
+   */
+  private async load(force = false): Promise<DiscoveredModel[]> {
     if (!force && this.cache !== null && Date.now() - this.cachedAt < this.ttlMs) {
-      return withExtras(this.cache);
+      return this.cache;
     }
     this.inflight ??= this.refresh();
     try {
-      return withExtras(await this.inflight);
+      return await this.inflight;
     } finally {
       this.inflight = null;
     }
@@ -270,7 +368,7 @@ export class ModelCatalog {
 
     let ids: string[];
     try {
-      ids = (await this.list()).map((m) => m.id);
+      ids = (await this.load()).map((m) => m.id);
     } catch {
       ids = [];
     }

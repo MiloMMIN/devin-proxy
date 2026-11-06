@@ -23,6 +23,7 @@ function makeConfig(overrides: Partial<ProxyConfig> = {}): ProxyConfig {
     configDir: join(dir, "cfg"),
     modelMap: {},
     modelsTtlMs: 60_000,
+    collapseModels: true,
     logLevel: "error",
     // Point desktop detection at a guaranteed-missing path unless overridden.
     desktopStateDb: join(dir, "missing.vscdb"),

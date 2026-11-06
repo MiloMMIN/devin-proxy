@@ -43,13 +43,14 @@ function makeConfig(overrides: Partial<ProxyConfig> = {}): ProxyConfig {
     configDir: join(mkdtempSync(join(tmpdir(), "devin-proxy-test-")), "cfg"),
     modelMap: { alias: "glm-5-2-none" },
     modelsTtlMs: 60_000,
+    collapseModels: true,
     logLevel: "error",
     ...overrides,
   };
 }
 
 function makeApp(config: ProxyConfig) {
-  const catalog = new ModelCatalog(upstream, config.modelsTtlMs, config.modelMap);
+  const catalog = new ModelCatalog(upstream, config.modelsTtlMs, config.modelMap, config.collapseModels);
   return createApp({ config, tokens, upstream, catalog });
 }
 
@@ -119,16 +120,30 @@ describe("health & auth", () => {
 });
 
 describe("GET /v1/models", () => {
-  test("returns discovered model shape", async () => {
+  test("returns collapsed family entries with their levels", async () => {
     const app = makeApp(makeConfig());
     const res = await app(req("/v1/models"));
     const body = await res.json() as { object: string; data: Record<string, unknown>[] };
     expect(body.object).toBe("list");
-    expect(body.data).toHaveLength(6);
+    // glm-5-2-none and claude-opus-5-medium/high collapse to two families,
+    // plus the three EXTRA_MODELS entries.
+    expect(body.data).toHaveLength(5);
     expect(body.data[0]).toMatchObject({
-      id: "glm-5-2-none", object: "model", owned_by: "devin",
-      context_window: 200_000, max_tokens: 64_000, reasoning: false, supports_images: true,
+      id: "glm-5-2", object: "model", owned_by: "devin",
+      context_window: 200_000, max_tokens: 64_000, context_length: 200_000, max_output_tokens: 64_000,
+      reasoning: true, supports_images: true, supported_efforts: ["none"],
     });
+    expect(body.data[1]).toMatchObject({
+      id: "claude-opus-5", reasoning: true, supported_efforts: ["medium", "high"],
+    });
+  });
+
+  test("MODELS_COLLAPSE=0 lists every upstream uid", async () => {
+    const app = makeApp(makeConfig({ collapseModels: false }));
+    const body = await (await app(req("/v1/models"))).json() as { data: { id: string }[] };
+    expect(body.data).toHaveLength(6);
+    expect(body.data[0].id).toBe("glm-5-2-none");
+    expect(body.data[0]).not.toHaveProperty("supported_efforts");
   });
 });
 

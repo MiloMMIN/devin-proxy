@@ -9,6 +9,7 @@
 - **零登录**：自动读取本机 Devin Desktop 已保存的登录态，无需再走 OAuth
 - **三种协议**：`/v1/chat/completions`、`/v1/responses`、`/v1/messages`（含 `count_tokens`），全部支持流式
 - **实时模型目录**：`GET /v1/models` 直接从 Devin 拉取当前可用模型（200+），带 10 分钟缓存，不再维护过期静态大表
+- **档位折叠**：`/v1/models` 默认把 `swe-2-high`、`swe-2-medium`、`swe-2-max` 这类同一家族的思考档位变体折叠成一条 `swe-2`，档位放进 `supported_efforts`；客户端用 base 名 + `reasoning_effort` / `thinking` 选深度，反代在请求时解析回具体 uid（`MODELS_COLLAPSE=0` 可关闭）
 - **全部模型可用**：以 Devin Local（chisel）身份声明 `ide_type`，`gpt-5-6-sol / luna / terra`、`gpt-6-astra` 这类“仅 Devin Local”模型也能直接调用
 - **JWT 缓存**：上游 JWT 有效期 15 分钟，缓存后每次请求省下约 2~3 秒握手延迟
 - **客户端断连即停**：客户端取消请求时立刻中止上游流，不烧额度
@@ -91,6 +92,7 @@ curl http://127.0.0.1:3000/v1/chat/completions \
 | `DEVIN_DESKTOP_STATE_DB` | 按平台自动 | 显式指定 Devin Desktop 的 `state.vscdb` 路径 |
 | `MODEL_MAP` | 空 | 模型别名映射，`alias=uid,alias2=uid2`；用于客户端模型名固定的场景（见下） |
 | `MODELS_TTL_MS` | `600000` | 模型目录缓存时长（毫秒）；`GET /v1/models?refresh=1` 可强制刷新 |
+| `MODELS_COLLAPSE` | `1` | 把档位变体折叠成 base 条目（`supported_efforts` 暴露档位）；`0` 则每个 uid 单列 |
 | `LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error`，输出到 stderr |
 
 `model` 字段接受任意上游模型 uid（以 `bun run models` 或 `GET /v1/models` 输出为准），未知 uid 原样透传给 Devin；响应中的 `model` 回填客户端传入的原始值。

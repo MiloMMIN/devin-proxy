@@ -144,6 +144,12 @@ export interface DiscoveredModel {
   reasoning: boolean;
   /** True when the model accepts image inputs. */
   supportsImages: boolean;
+  /**
+   * Thinking levels this id exposes, when the catalog entry is a collapsed
+   * family (`swe-2` → `["medium","high","max"]`). Populated for display only;
+   * upstream discovery does not send it.
+   */
+  supportedEfforts?: string[];
 }
 
 export interface UpstreamClient {

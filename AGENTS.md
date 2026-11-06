@@ -30,7 +30,11 @@ LIVE=1 bun test test/live.test.ts   # one real upstream call (requires local Dev
   has no effort parameter; each family-level-tier combo is a distinct uid).
   `list()` appends `adaptive` (upstream auto-router) plus two built-in fusion
   preset aliases (`BUILTIN_ALIASES`); fusion uids are chisel lead+sidekick
-  orchestration presets, not standalone models.
+  orchestration presets, not standalone models. `list()` also collapses
+  effort-variant uids into base entries (`collapseModelLevels`, on by default,
+  `MODELS_COLLAPSE=0` disables) and reports their levels in
+  `supported_efforts`; `resolve()` still searches the raw catalog so
+  `swe-2` + `high` lands on `swe-2-high`.
 - `src/server.ts` + `src/handlers/` — OpenAI Chat Completions / Responses,
   Anthropic Messages endpoints.
 - `src/token.ts` + `src/desktop.ts` — token resolution chain:

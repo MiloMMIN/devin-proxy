@@ -53,7 +53,7 @@ async function cmdServe(): Promise<void> {
   }
 
   const upstream = createUpstreamClient({ tokens, baseUrl: config.devinBaseUrl });
-  const catalog = new ModelCatalog(upstream, config.modelsTtlMs, config.modelMap);
+  const catalog = new ModelCatalog(upstream, config.modelsTtlMs, config.modelMap, config.collapseModels);
   const { server, stop } = startServer({ config, tokens, upstream, catalog });
 
   const shutdown = (): void => {
@@ -104,7 +104,7 @@ async function cmdModels(): Promise<void> {
   log.setLevel(config.logLevel);
   const tokens = createTokenProvider(config);
   const upstream = createUpstreamClient({ tokens, baseUrl: config.devinBaseUrl });
-  const catalog = new ModelCatalog(upstream, config.modelsTtlMs, config.modelMap);
+  const catalog = new ModelCatalog(upstream, config.modelsTtlMs, config.modelMap, config.collapseModels);
   try {
     const models = await catalog.list(true);
     const idW = Math.min(60, Math.max(20, ...models.map((m) => m.id.length)) + 2);
@@ -113,7 +113,7 @@ async function cmdModels(): Promise<void> {
     for (const m of models) {
       const name = m.name.length > nameW - 1 ? m.name.slice(0, nameW - 2) + "…" : m.name;
       console.log(
-        `${m.id.padEnd(idW)}${name.padEnd(nameW)}${String(m.contextWindow).padStart(9)}  ${m.supportsImages ? "yes" : "-"}     ${m.reasoning ? "yes" : "-"}`,
+        `${m.id.padEnd(idW)}${name.padEnd(nameW)}${String(m.contextWindow).padStart(9)}  ${m.supportsImages ? "yes" : "-"}     ${m.supportedEfforts?.length ? m.supportedEfforts.join(",") : m.reasoning ? "yes" : "-"}`,
       );
     }
     console.log(`\n${models.length} models`);

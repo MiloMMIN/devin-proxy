@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ModelCatalog, effortLevelFromThinking } from "../src/models.js";
+import { ModelCatalog, collapseModelLevels, effortLevelFromThinking } from "../src/models.js";
 import type { ChatStreamEvent, DiscoveredModel, UpstreamClient } from "../src/upstream.js";
 
 const MODELS: DiscoveredModel[] = [
@@ -203,5 +203,58 @@ describe("effortLevelFromThinking", () => {
     expect(effortLevelFromThinking({ type: "disabled" }, "max")).toBe("max");
     // invalid effort falls back to the thinking mapping
     expect(effortLevelFromThinking({ type: "disabled" }, "bogus")).toBe("none");
+  });
+});
+
+describe("collapseModelLevels", () => {
+  const model = (id: string, extra: Partial<DiscoveredModel> = {}): DiscoveredModel => ({
+    id, name: id, contextWindow: 200_000, maxTokens: 64_000, reasoning: true, supportsImages: false, ...extra,
+  });
+
+  test("collapses a family into one base carrying the union of levels", () => {
+    const out = collapseModelLevels([
+      model("swe-2-medium", { contextWindow: 262_000, supportsImages: true }),
+      model("swe-2-high"),
+      model("swe-2-max", { maxTokens: 128_000 }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      id: "swe-2", name: "swe-2-medium", contextWindow: 262_000, maxTokens: 128_000,
+      reasoning: true, supportsImages: true, supportedEfforts: ["medium", "high", "max"],
+    });
+  });
+
+  test("keeps functional tiers as separate entries", () => {
+    const out = collapseModelLevels([
+      model("claude-opus-5-low"), model("claude-opus-5-high"),
+      model("claude-opus-5-low-fast"), model("claude-opus-5-high-fast"),
+    ]);
+    expect(out.map((m) => m.id)).toEqual(["claude-opus-5", "claude-opus-5-fast"]);
+    expect(out[1].supportedEfforts).toEqual(["low", "high"]);
+  });
+
+  test("maps the thinking pseudo-level onto high", () => {
+    const out = collapseModelLevels([model("claude-opus-4-6"), model("claude-opus-4-6-thinking"), model("claude-opus-4-6-1m")]);
+    expect(out.map((m) => m.id)).toEqual(["claude-opus-4-6", "claude-opus-4-6-1m"]);
+    expect(out[0].supportedEfforts).toEqual(["high"]);
+    expect(out[1].supportedEfforts).toBeUndefined();
+  });
+
+  test("passes opaque ids and lightning tiers through", () => {
+    const out = collapseModelLevels([model("adaptive"), model("swe-2-high-lightning")]);
+    expect(out.map((m) => m.id)).toEqual(["adaptive", "swe-2-high-lightning"]);
+  });
+});
+
+describe("ModelCatalog collapse + resolve", () => {
+  test("list() collapses but resolve() still reaches the exact uid", async () => {
+    const { client } = fakeUpstream({ models: LEVEL_MODELS });
+    const catalog = new ModelCatalog(client, 60_000, {}, true);
+    const ids = (await catalog.list()).map((m) => m.id);
+    expect(ids).toContain("claude-opus-5");
+    expect(ids).not.toContain("claude-opus-5-high");
+    expect(await catalog.resolve("claude-opus-5", "high")).toBe("claude-opus-5-high");
+    expect(await catalog.resolve("claude-opus-5", "xhigh")).toBe("claude-opus-5-xhigh");
+    expect(await catalog.resolve("gpt-5-6-terra", "high")).toBe("gpt-5-6-terra-high-priority");
   });
 });

@@ -20,10 +20,19 @@ export async function handleModels(req: Request, deps: AppDeps, reqId: string): 
         object: "model",
         created: 1700000000,
         owned_by: "devin",
+        name: m.name,
         context_window: m.contextWindow,
         max_tokens: m.maxTokens,
+        // Aliases some aggregators probe for (the farm manager reads both
+        // shapes: devin's context_window/max_tokens and OpenRouter-style
+        // context_length/max_output_tokens).
+        context_length: m.contextWindow,
+        max_output_tokens: m.maxTokens,
         reasoning: m.reasoning,
         supports_images: m.supportsImages,
+        ...(m.supportedEfforts && m.supportedEfforts.length > 0
+          ? { supported_efforts: m.supportedEfforts, efforts: m.supportedEfforts }
+          : {}),
       })),
     });
   } catch (err) {
